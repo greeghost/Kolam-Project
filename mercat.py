@@ -1,5 +1,7 @@
 import matplotlib.pyplot as plt
-import numpy as np
+import matplotlib.colors as mcolors
+from random import shuffle
+import numpy as np # trigonometric functions and pi, linspace for plotting with matplotlib
 from math import sqrt
 
 LEFT = 0
@@ -45,7 +47,10 @@ class Point(object):
     def __mul__(self, other):
         if isinstance(other, float) or isinstance(other, int):
             return Point(self.x * other, self.y * other)
-        raise TypeError(f"Multiplying Point with object of incompatible type : {other}")        
+        raise TypeError(f"Multiplying Point with object of incompatible type : {other}")    
+
+    def __neg__(self):
+        return Point(-self.x, -self.y)
 
     def __rmul__(self, other):
         return self.__mul__(other)
@@ -107,26 +112,31 @@ class Grid(object):
         direction = RIGHT
         while (edge != starting_edge) or done == []:
             done.append(edge)
-            next = g.next_vertex(edge[0], edge[1], direction)
+            next = self.next_vertex(edge[0], edge[1], direction)
             edge = edge[1], next
             direction = 1 - direction
 
         return [edge[0] for edge in done]
 
-    def plot_knotwork(self, spread):
+    def plot_knotwork(self, spread, color_each_arc = False):
+        plt.scatter([u.x for u in self.points], [u.y for u in self.points])
         spread = spread
         plt.axis("equal")
         todo = [(init, dir) for init in self.edges for dir in self.edges[init]]
-        colors = ["red", "green", "blue", "yellow", "orange", "lime", "purple", "pink"]
+        simples = [(init) for init in self.edges if self.edges[init] == []]
+        simple_rad = 1
+        # colors = [mcolors.XKCD_COLORS["xkcd:" + col] for col in ["purple", "green", "blue", "pink", "brown", "red", "teal", "orange", "magenta", "yellow"]]
+        colors = list(mcolors.XKCD_COLORS.values()) # 954 common RGB colors, including some very pale shades
+        # shuffle(colors)
+        color = 0
         vals_01 = np.linspace(0, 1, 100)
 
         while todo != []:
             (init, dir) = todo[0]
-            done = g.path(init, dir)
+            done = self.path(init, dir)
             done.append(done[0])
             done.append(done[1])
 
-            color = 0
             clock = False
             for i in range(len(done) - 2):
                 u, v, w = done[i], done[i + 1], done[i + 2]
@@ -136,13 +146,28 @@ class Grid(object):
                 mid2 = 0.5 * (v + w)
                 dist = (mid1 - mid2).norm()
                 if dist <= 1e-14:
-                    dist = spread / 2
+                    dist = spread * 3
                 p1 = spread * dist * rotate_45(Point.normed(v - u), clockwise = clock)
                 p2 = spread * dist * rotate_45(Point.normed(v - w), clockwise = not clock)
                 path = lambda t: cubic_bezier(mid1, mid1 + p1, mid2 + p2, mid2, t)
                 xs, ys = zip(*[path(t) for t in vals_01])
                 plt.plot(xs, ys, color=colors[color % len(colors)], label = f"{mid1} - {mid2}")
                 clock = not clock
+                color += color_each_arc
+            color += 1
+
+        while simples != []:
+            u = simples.pop()
+            v, w = Point(u.x + simple_rad / 2, u.y), Point(u.x - simple_rad / 2, u.y)
+            top = Point(0, 4/3 * simple_rad / 2)
+            bottom = Point(0, -4/3 * simple_rad / 2)
+            pathtop = lambda t: cubic_bezier(v, v + top, w + top, w, t)
+            pathbottom = lambda t: cubic_bezier(v, v + bottom, w + bottom, w, t)
+            xs, ys = zip(*[pathtop(t) for t in vals_01])
+            plt.plot(xs, ys, color=colors[color % len(colors)])
+            color += color_each_arc
+            xs, ys = zip(*[pathbottom(t) for t in vals_01])
+            plt.plot(xs, ys, color=colors[color % len(colors)])
             color += 1
 
     def plot(self):
@@ -174,74 +199,65 @@ def rotate_45(p, clockwise=True):
         return Point(b * (p.x + p.y), b * (p.y - p.x))
 
 if __name__ == "__main__":
-    # # test with a n-branch triangular star idk what to call that
-    n = 5
+    # Square-ish pattern
+    G_squares = Grid([Point(0, 2), Point(0, -2), Point(-2, 0), Point(2, 0), Point(1, 1), Point(1, -1), Point(-1, 1), Point(-1, -1), Point(0, 0)])
+    G_squares.add_edge(Point(0, 2), Point(1, 1))
+    G_squares.add_edge(Point(0, 2), Point(-1, 1))
+    G_squares.add_edge(Point(0, -2), Point(1, -1))
+    G_squares.add_edge(Point(0, -2), Point(-1, -1))
+    G_squares.add_edge(Point(2, 0), Point(1, 1))
+    G_squares.add_edge(Point(2, 0), Point(1, -1))
+    G_squares.add_edge(Point(-2, 0), Point(-1, 1))
+    G_squares.add_edge(Point(-2, 0), Point(-1, -1))
 
-    l = [Point(np.cos(2 * i * np.pi / n), np.sin(2 * i * np.pi / n))
+    # n-branch star
+    n = 3
+    l_star = [Point(np.cos(2 * i * np.pi / n), np.sin(2 * i * np.pi / n))
         for i in range(n)]
-    l.append(Point(0, 0))
-    g = Grid(l)
+    l_star.append(Point(0, 0))
+    G_star = Grid(l_star)
     for i in range(n):
-        g.add_edge(l[i], l[n])
-        g.add_edge(l[i], l[(i + 1) % n])
+        G_star.add_edge(l_star[i], l_star[n])
+        G_star.add_edge(l_star[i], l_star[(i + 1) % n])
 
-
-    plt.subplot(121)
-    g.plot_knotwork(.5)
-
-    plt.subplot(122)
-    g.plot()
-    plt.show()
-
-
-    # bezier curve illustration
-    # ts = np.linspace(0, 1, 100)
-    # init, dir = Point(-1, 0), Point(1, 0)
-    # c1, c2 = Point(1, 1), Point(-1, 1) # medium
-    # c3, c4 = 5 * c1, 5 * c2 # big
-    # c5, c6 = .3 * c1, .3 * c2 # small
-
-    # f3 = lambda t: cubic_bezier(init, c5, c6, dir, t)
-    # f1 = lambda t: cubic_bezier(init, c1, c2, dir, t)
-    # f2 = lambda t: cubic_bezier(init, c3, c4, dir, t)
-
-    # x3s, y3s = zip(*[f3(t) for t in ts])
-    # x1s, y1s = zip(*[f1(t) for t in ts])
-    # x2s, y2s = zip(*[f2(t) for t in ts])
-
-    # fig, axs = plt.subplots(3)
+    # classic kolam 
+    l_classic = [Point(0, 1), Point(0, -1), Point(1, 0), Point(-1, 0)]
+    l_classic.append(Point(0, 0))
+    l_classic.append(Point(0, 2))
+    l_classic.append(Point(1, 1))
+    l_classic.append(Point(-1, 1))
+    G_classic = Grid(l_classic)
+    G_classic.add_edge(Point(0, 1), Point(0, 2))
+    G_classic.add_edge(Point(1, 1), Point(0, 1))
+    G_classic.add_edge(Point(-1, 1), Point(0, 1))
+    for i in range(4):
+        G_classic.add_edge(l_classic[i], l_classic[4])
     
-    # axs[0].plot(x3s, y3s)
-    # axs[1].plot(x1s, y1s)
-    # axs[2].plot(x2s, y2s)
 
-    # plt.axis("equal")
+    # G_squares.plot_knotwork(0.75)
+    # plt.show()
+    # G_star.plot_knotwork(1)
+    # plt.show()
+    # G_classic.plot_knotwork(2)
     # plt.show()
 
+    # Non-classic test pattern
+    u1 = Point(1, 0)
+    u2 = Point(np.sin(np.pi / 6), np.cos(np.pi / 6))
 
+    l_hex1 = [u1, u2, u2 - u1, -u1, -u2, u1 - u2, Point(0, 0)]
+    G_hex1 = Grid(l_hex1 + [2 * u1, -2 * u2, 2 * (u2 - u1)])
+    G_hex1.add_edge(u1, u2)
+    G_hex1.add_edge(u2, u2 - u1)
+    G_hex1.add_edge(u2 - u1, -u1)
+    G_hex1.add_edge(-u1, -u2)
+    G_hex1.add_edge(-u2, u1 - u2)
+    G_hex1.add_edge(u1 - u2, u1)
 
-    # # classic kolam illustration 
-    # n = 4
+    G_hex1.add_edge(u1, 2 * u1)
+    G_hex1.add_edge(-u2, -2 * u2)
+    G_hex1.add_edge(u2 - u1, 2 * (u2 - u1))
 
-    # l = [Point(0, 1), Point(0, -1), Point(1, 0), Point(-1, 0)]
-    # l.append(Point(0, 0))
-    # l.append(Point(0, 2))
-    # l.append(Point(1, 1))
-    # l.append(Point(-1, 1))
-
-    # g = Grid(l)
-    # g.add_edge(Point(0, 1), Point(0, 2))
-    # g.add_edge(Point(1, 1), Point(0, 1))
-    # g.add_edge(Point(-1, 1), Point(0, 1))
-    # for i in range(n):
-    #     g.add_edge(l[i], l[n])
-    #     # g.add_edge(l[i], l[(i + 1) % n])
-
-
-    # # g.plot()
-    # plt.subplot(121)
-    # g.plot_knotwork(2)
-
-    # plt.subplot(122)
-    # g.plot()
-    # plt.show()
+    G_hex1.plot_knotwork(2/3)
+    G_hex1.plot()
+    plt.show()

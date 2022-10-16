@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
-from random import shuffle
+from random import shuffle, random
 import numpy as np # trigonometric functions and pi, linspace for plotting with matplotlib
 from math import sqrt
 
@@ -118,10 +118,11 @@ class Grid(object):
 
         return [edge[0] for edge in done]
 
-    def plot_knotwork(self, spread, color_each_arc = False):
+    def plot_knotwork(self, spread, loop_size, color_each_arc = False):
         plt.scatter([u.x for u in self.points], [u.y for u in self.points])
         spread = spread
         plt.axis("equal")
+        plt.axis('off')
         todo = [(init, dir) for init in self.edges for dir in self.edges[init]]
         simples = [(init) for init in self.edges if self.edges[init] == []]
         simple_rad = 1
@@ -146,7 +147,7 @@ class Grid(object):
                 mid2 = 0.5 * (v + w)
                 dist = (mid1 - mid2).norm()
                 if dist <= 1e-14:
-                    dist = spread * 3
+                    dist = loop_size / spread * (v - u).norm()
                 p1 = spread * dist * rotate_45(Point.normed(v - u), clockwise = clock)
                 p2 = spread * dist * rotate_45(Point.normed(v - w), clockwise = not clock)
                 path = lambda t: cubic_bezier(mid1, mid1 + p1, mid2 + p2, mid2, t)
@@ -172,6 +173,7 @@ class Grid(object):
 
     def plot(self):
         plt.axis("equal")
+        plt.axis('off')
         plt.scatter([u.x for u in self.points], [u.y for u in self.points])
         done = []
         for u in self.edges:
@@ -199,65 +201,11 @@ def rotate_45(p, clockwise=True):
         return Point(b * (p.x + p.y), b * (p.y - p.x))
 
 if __name__ == "__main__":
-    # Square-ish pattern
-    G_squares = Grid([Point(0, 2), Point(0, -2), Point(-2, 0), Point(2, 0), Point(1, 1), Point(1, -1), Point(-1, 1), Point(-1, -1), Point(0, 0)])
-    G_squares.add_edge(Point(0, 2), Point(1, 1))
-    G_squares.add_edge(Point(0, 2), Point(-1, 1))
-    G_squares.add_edge(Point(0, -2), Point(1, -1))
-    G_squares.add_edge(Point(0, -2), Point(-1, -1))
-    G_squares.add_edge(Point(2, 0), Point(1, 1))
-    G_squares.add_edge(Point(2, 0), Point(1, -1))
-    G_squares.add_edge(Point(-2, 0), Point(-1, 1))
-    G_squares.add_edge(Point(-2, 0), Point(-1, -1))
-
-    # n-branch star
-    n = 3
-    l_star = [Point(np.cos(2 * i * np.pi / n), np.sin(2 * i * np.pi / n))
-        for i in range(n)]
-    l_star.append(Point(0, 0))
-    G_star = Grid(l_star)
-    for i in range(n):
-        G_star.add_edge(l_star[i], l_star[n])
-        G_star.add_edge(l_star[i], l_star[(i + 1) % n])
-
-    # classic kolam 
-    l_classic = [Point(0, 1), Point(0, -1), Point(1, 0), Point(-1, 0)]
-    l_classic.append(Point(0, 0))
-    l_classic.append(Point(0, 2))
-    l_classic.append(Point(1, 1))
-    l_classic.append(Point(-1, 1))
+    l_classic = [Point(0, 1), Point(0, -1), Point(1, 0), Point(-1, 0), Point(0, 0), Point(0, 2), Point(1, 1), Point(-1, 1)]
     G_classic = Grid(l_classic)
-    G_classic.add_edge(Point(0, 1), Point(0, 2))
-    G_classic.add_edge(Point(1, 1), Point(0, 1))
-    G_classic.add_edge(Point(-1, 1), Point(0, 1))
     for i in range(4):
         G_classic.add_edge(l_classic[i], l_classic[4])
+        G_classic.add_edge(l_classic[0], l_classic[4 + i])
     
-
-    # G_squares.plot_knotwork(0.75)
-    # plt.show()
-    # G_star.plot_knotwork(1)
-    # plt.show()
-    # G_classic.plot_knotwork(2)
-    # plt.show()
-
-    # Non-classic test pattern
-    u1 = Point(1, 0)
-    u2 = Point(np.sin(np.pi / 6), np.cos(np.pi / 6))
-
-    l_hex1 = [u1, u2, u2 - u1, -u1, -u2, u1 - u2, Point(0, 0)]
-    G_hex1 = Grid(l_hex1 + [2 * u1, -2 * u2, 2 * (u2 - u1)])
-    G_hex1.add_edge(u1, u2)
-    G_hex1.add_edge(u2, u2 - u1)
-    G_hex1.add_edge(u2 - u1, -u1)
-    G_hex1.add_edge(-u1, -u2)
-    G_hex1.add_edge(-u2, u1 - u2)
-    G_hex1.add_edge(u1 - u2, u1)
-
-    G_hex1.add_edge(u1, 2 * u1)
-    G_hex1.add_edge(-u2, -2 * u2)
-    G_hex1.add_edge(u2 - u1, 2 * (u2 - u1))
-
-    G_hex1.plot_knotwork(2/3)
-    G_hex1.plot()
+    G_classic.plot_knotwork(1, 1.5)
     plt.show()

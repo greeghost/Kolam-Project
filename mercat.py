@@ -110,22 +110,27 @@ class Grid(object):
         starting_edge = (u, v)
         edge = starting_edge
         direction = RIGHT
-        while (edge != starting_edge) or done == []:
+        iter = 0
+        while edge != starting_edge or iter % 2 == 1 or iter == 0:
             done.append(edge)
             next = self.next_vertex(edge[0], edge[1], direction)
             edge = edge[1], next
             direction = 1 - direction
+            iter += 1
 
         return [edge[0] for edge in done]
 
-    def plot_knotwork(self, spread, loop_size, color_each_arc = False):
+    def plot_knotwork(self, spread, loop_size, color_each_arc = False, interp = "bezier"):
+        if interp == "hermite":
+            fun = cubic_hermite
+        else:
+            fun = cubic_bezier
         plt.scatter([u.x for u in self.points], [u.y for u in self.points])
-        spread = spread
         plt.axis("equal")
         plt.axis('off')
         todo = [(init, dir) for init in self.edges for dir in self.edges[init]]
-        simples = [(init) for init in self.edges if self.edges[init] == []]
-        simple_rad = 1
+        # simples = [(init) for init in self.edges if self.edges[init] == []]
+        # simple_rad = 1
         # colors = [mcolors.XKCD_COLORS["xkcd:" + col] for col in ["purple", "green", "blue", "pink", "brown", "red", "teal", "orange", "magenta", "yellow"]]
         colors = list(mcolors.XKCD_COLORS.values()) # 954 common RGB colors, including some very pale shades
         # shuffle(colors)
@@ -140,6 +145,7 @@ class Grid(object):
 
             clock = False
             for i in range(len(done) - 2):
+                param = 3
                 u, v, w = done[i], done[i + 1], done[i + 2]
                 if ((u, v)) in todo: # needs to be made better
                     todo.remove((u, v))
@@ -148,28 +154,32 @@ class Grid(object):
                 dist = (mid1 - mid2).norm()
                 if dist <= 1e-14:
                     dist = loop_size / spread * (v - u).norm()
-                p1 = spread * dist * rotate_45(Point.normed(v - u), clockwise = clock)
-                p2 = spread * dist * rotate_45(Point.normed(v - w), clockwise = not clock)
-                path = lambda t: cubic_bezier(mid1, mid1 + p1, mid2 + p2, mid2, t)
+                    param = 2
+                n1 = rotate_45(Point.normed(v - u), clockwise = clock)
+                p1 = spread * dist * n1
+                n2 = rotate_45(Point.normed(v - w), clockwise = not clock)
+                p2 = spread * dist * n2
+                cos = n1.x * n2.x + n1.y * n2.y
+                path = lambda t: fun(mid1, mid1 + p1, mid2 + p2, mid2, t, par=param, cos=cos)
                 xs, ys = zip(*[path(t) for t in vals_01])
                 plt.plot(xs, ys, color=colors[color % len(colors)], label = f"{mid1} - {mid2}")
                 clock = not clock
                 color += color_each_arc
             color += 1
 
-        while simples != []:
-            u = simples.pop()
-            v, w = Point(u.x + simple_rad / 2, u.y), Point(u.x - simple_rad / 2, u.y)
-            top = Point(0, 4/3 * simple_rad / 2)
-            bottom = Point(0, -4/3 * simple_rad / 2)
-            pathtop = lambda t: cubic_bezier(v, v + top, w + top, w, t)
-            pathbottom = lambda t: cubic_bezier(v, v + bottom, w + bottom, w, t)
-            xs, ys = zip(*[pathtop(t) for t in vals_01])
-            plt.plot(xs, ys, color=colors[color % len(colors)])
-            color += color_each_arc
-            xs, ys = zip(*[pathbottom(t) for t in vals_01])
-            plt.plot(xs, ys, color=colors[color % len(colors)])
-            color += 1
+        # while simples != []:
+        #     u = simples.pop()
+        #     v, w = Point(u.x + simple_rad / 2, u.y), Point(u.x - simple_rad / 2, u.y)
+        #     top = Point(0, 4/3 * simple_rad / 2)
+        #     bottom = Point(0, -4/3 * simple_rad / 2)
+        #     pathtop = lambda t: fun(v, v + top, w + top, w, t)
+        #     pathbottom = lambda t: fun(v, v + bottom, w + bottom, w, t)
+        #     xs, ys = zip(*[pathtop(t) for t in vals_01])
+        #     plt.plot(xs, ys, color=colors[color % len(colors)])
+        #     color += color_each_arc
+        #     xs, ys = zip(*[pathbottom(t) for t in vals_01])
+        #     plt.plot(xs, ys, color=colors[color % len(colors)])
+        #     color += 1
 
     def plot(self):
         plt.axis("equal")
@@ -183,13 +193,26 @@ class Grid(object):
             done.append(u)
 
 
-def cubic_bezier(u, v, w, p, t):
+def cubic_bezier(u, v, w, p, t, **kwargs):
     # u, v, w, p : control points
     # t : [0-1], point on which to evaluate the function
+    cos = kwargs.get("cos", 1)
     val1 = (1 - t) ** 3 * u
-    val2 = 3 * t * (1 - t) ** 2 * v
-    val3 = 3 * (1 - t) * t ** 2 * w
+    val2 = 3 * t * (1 - t) ** 2 * (u + (1 + cos) * (v - u))
+    val3 = 3 * (1 - t) * t ** 2 * (p + (1 + cos) * (w - p))
     val4 = t ** 3 * p
+    res = val1 + val2 + val3 + val4
+    return res.x, res.y
+
+def cubic_hermite(u, v, w, p, t, **kwargs):
+    # u, v, w, p : control points
+    # t : [0-1], point on which to evaluate the function
+    par = kwargs.get("par", 3)
+    cos = kwargs.get("cos", 1)
+    val1 = (2 * t ** 3 - 3 * t ** 2 + 1) * u
+    val2 = par * (t ** 3 - 2 * t ** 2 + t) * ((1 + cos) * (v - u))
+    val3 = par * (t ** 3 - t ** 2) * ((1 + cos) * (p - w))
+    val4 = (-2 * t ** 3 + 3 * t ** 2) * p
     res = val1 + val2 + val3 + val4
     return res.x, res.y
 
@@ -207,5 +230,5 @@ if __name__ == "__main__":
         G_classic.add_edge(l_classic[i], l_classic[4])
         G_classic.add_edge(l_classic[0], l_classic[4 + i])
     
-    G_classic.plot_knotwork(1, 1.5)
+    G_classic.plot_knotwork(1, 1.5, interp="hermite")
     plt.show()

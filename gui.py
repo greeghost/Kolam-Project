@@ -1,7 +1,9 @@
 import tkinter as tk
+from tkinter.filedialog import asksaveasfile,  askopenfile
 from math import sqrt, ceil, floor
 from mercat import Grid, Point
 import matplotlib.pyplot as plt
+import re
 
 class KolamApp(tk.Tk):
     def __init__(self, *args, **kwargs):
@@ -54,6 +56,12 @@ class ControlPanel(tk.Canvas):
         self.l3.grid(row=5, column=1)
         self.om2.grid(row=5, column=2)
 
+        self.b6 = tk.Button(self, text = "Save", command = self.save)
+        self.b6.grid(row=6, column=0)
+
+        self.b7 = tk.Button(self, text = "Load", command = self.load)
+        self.b7.grid(row=7, column=0)
+
     def mouse_preset_1(self):
         self.master.pb.selected_pulli = None
         self.master.pb.bind("<ButtonPress-1>", self.master.pb.add_pulli)
@@ -84,6 +92,12 @@ class ControlPanel(tk.Canvas):
                 print("Invalid spacing")
         else:
             self.master.pb.create_pulli_grid(shape)
+    
+    def save(self):
+        self.master.pb.save()
+    
+    def load(self):
+        self.master.pb.load()
 
 class PulliBoard(tk.Canvas):
     PULLI_RADIUS = 10
@@ -116,9 +130,9 @@ class PulliBoard(tk.Canvas):
         self.links = []
         self.selected_pulli = None
     
-    def get_pulli(self, event):
+    def get_pulli(self, x, y):
         for pulli in self.pullis[::-1]:
-            if sqrt((pulli[0] - event.x) ** 2 + (pulli[1] - event.y) ** 2) <= self.PULLI_RADIUS:
+            if sqrt((pulli[0] - x) ** 2 + (pulli[1] - y) ** 2) <= self.PULLI_RADIUS:
                 return pulli
         return None
 
@@ -128,6 +142,65 @@ class PulliBoard(tk.Canvas):
         pulli = self.create_oval(x - self.PULLI_RADIUS, y - self.PULLI_RADIUS, x + self.PULLI_RADIUS, y + self.PULLI_RADIUS, fill="red")
         self.pullis.append((x, y, pulli))
 
+    def remove_pulli(self, event):
+        pulli = self.get_pulli(event.x, event.y)
+        if pulli is None:
+            return
+        self.pullis.remove(pulli)
+        self.delete(pulli[2])
+        for link in self.links[:]: # [:] to iterate over a copy since we remove element of self.links on the fly.
+            if pulli in link:
+                self.delete(link[2])
+                self.links.remove(link)
+
+    def add_link(self, event):
+        pulli = self.get_pulli(event.x, event.y)
+        if pulli is None:
+            return
+        if (self.selected_pulli is not None) and (self.last_event == self.ADD_LINK):
+            p1 = min(self.selected_pulli, pulli)
+            p2 = max(self.selected_pulli, pulli)
+            if p1 == p2:
+                return
+            for link in self.links:
+                if link[0] == p1 and link[1] == p2:
+                    break
+            else:
+                line = self.create_line(p1[0], p1[1], p2[0], p2[1], width=2)
+                self.links.append((p1, p2, line))
+                self.selected_pulli = None
+        else:
+            self.selected_pulli = pulli
+            self.last_event = self.ADD_LINK
+
+    def remove_link(self, event):
+        pulli = self.get_pulli(event.x, event.y)
+        if pulli is None:
+            return
+        if (self.selected_pulli is not None) and (self.last_event == self.RM_LINK):
+            p1 = min(self.selected_pulli, pulli)
+            p2 = max(self.selected_pulli, pulli)
+            for link in self.links:
+                if link[0] == p1 and link[1] == p2:
+                    self.delete(link[2])
+                    self.links.remove(link)
+                    self.selected_pulli = None
+        else:
+            self.selected_pulli = pulli
+            self.last_event = self.RM_LINK
+    
+    def mercatize(self, fun):
+        G = Grid([])
+        for link in self.links:
+            p1 = Point(link[0][0], -link[0][1])
+            p2 = Point(link[1][0], -link[1][1])
+            G.add_point(p1)
+            G.add_point(p2)
+            G.add_edge(p1, p2)
+        G.plot_knotwork(0.75, 1.25, color_each_thread = True, interp=fun)
+        # G.plot()
+        plt.show()
+    
     def create_pulli_grid(self, shape, spacing = 100):
         match = {
             "square": self.create_square_grid,
@@ -165,70 +238,43 @@ class PulliBoard(tk.Canvas):
                 pulli = self.create_oval(x - self.PULLI_RADIUS, y - self.PULLI_RADIUS, x + self.PULLI_RADIUS, y + self.PULLI_RADIUS, fill="red")
                 self.pullis.append((x, y, pulli))
 
-
-
-
-
-    def remove_pulli(self, event):
-        pulli = self.get_pulli(event)
-        if pulli is None:
-            return
-        self.pullis.remove(pulli)
-        self.delete(pulli[2])
-        for link in self.links[:]: # [:] to iterate over a copy since we remove element of self.links on the fly.
-            if pulli in link:
-                self.delete(link[2])
-                self.links.remove(link)
-
-    def add_link(self, event):
-        pulli = self.get_pulli(event)
-        if pulli is None:
-            return
-        if (self.selected_pulli is not None) and (self.last_event == self.ADD_LINK):
-            p1 = min(self.selected_pulli, pulli)
-            p2 = max(self.selected_pulli, pulli)
-            if p1 == p2:
-                return
-            for link in self.links:
-                if link[0] == p1 and link[1] == p2:
-                    break
-            else:
-                line = self.create_line(p1[0], p1[1], p2[0], p2[1], width=2)
-                self.links.append((p1, p2, line))
-                self.selected_pulli = None
-        else:
-            self.selected_pulli = pulli
-            self.last_event = self.ADD_LINK
-
-    def remove_link(self, event):
-        pulli = self.get_pulli(event)
-        if pulli is None:
-            return
-        if (self.selected_pulli is not None) and (self.last_event == self.RM_LINK):
-            p1 = min(self.selected_pulli, pulli)
-            p2 = max(self.selected_pulli, pulli)
-            for link in self.links:
-                if link[0] == p1 and link[1] == p2:
-                    self.delete(link[2])
-                    self.links.remove(link)
-                    self.selected_pulli = None
-        else:
-            self.selected_pulli = pulli
-            self.last_event = self.RM_LINK
-    
-    def mercatize(self, fun):
+    def save(self):
         G = Grid([])
-        for pulli in self.pullis:
-            G.add_point(Point(pulli[0], -pulli[1]))
         for link in self.links:
             p1 = Point(link[0][0], -link[0][1])
             p2 = Point(link[1][0], -link[1][1])
+            G.add_point(p1)
+            G.add_point(p2)
             G.add_edge(p1, p2)
-        G.plot_knotwork(0.75, 1.25, interp=fun)
-        G.plot()
-        plt.show()
+        fh = asksaveasfile(initialdir="Kolam-Project/saves")
+        fh.write(str(G))
+        fh.close()
 
+    def load(self):
+        regexp = r"^((?:\([0-9e+\-.]*, [0-9e+\-.]*\) )+)-((?: (?:\([0-9e+\-.]*, [0-9e+\-.]*\)) (?:\([0-9e+\-.]*, [0-9e+\-.]*\)))+)$"
+        fh = askopenfile(initialdir="Kolam-Project/saves")
+        content = fh.readline()
+        match = re.search(regexp, content)
+        if match is None:
+            print("Invalid file")
+            return
 
+        pullis, links = content.split(" - ")
+        for pulli in re.findall(r"\([0-9e+\-.]*, [0-9e+\-.]*\)", pullis):
+            x, y = pulli[1:-1].split(", ")
+            x = float(x)
+            y = -float(y)
+            pulli = self.create_oval(x - self.PULLI_RADIUS, y - self.PULLI_RADIUS, x + self.PULLI_RADIUS, y + self.PULLI_RADIUS, fill="red")
+            self.pullis.append((x, y, pulli))
+
+        for link in re.findall(r"\([0-9e+\-.]*, [0-9e+\-.]*\) \([0-9e+\-.]*, [0-9e+\-.]*\)", links):
+            p1, p2 = re.findall(r"\([0-9e+\-.]*, [0-9e+\-.]*\)", link)
+            p1 = p1[1:-1].split(", ")
+            p2 = p2[1:-1].split(", ")
+            p1 = self.get_pulli(float(p1[0]), -float(p1[1]))
+            p2 = self.get_pulli(float(p2[0]), -float(p2[1]))
+            line = self.create_line(p1[0], p1[1], p2[0], p2[1], width=2)
+            self.links.append((p1, p2, line))
 
 if __name__ == '__main__':
     KolamApp().run()

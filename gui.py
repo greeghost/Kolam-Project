@@ -49,7 +49,7 @@ class ControlPanel(tk.Canvas):
         self.e3 = tk.StringVar(self)
         self.e3.set("square")
         self.l3 = tk.Label(self, text="shape")
-        self.om2 = tk.OptionMenu(self, self.e3, *["square", "triangular"])
+        self.om2 = tk.OptionMenu(self, self.e3, *["square", "triangular", "hexagonal"])
         self.b5.grid(row=4, column=0)
         self.l2.grid(row=4, column=1)
         self.e2.grid(row=4, column=2)
@@ -197,46 +197,49 @@ class PulliBoard(tk.Canvas):
             G.add_point(p1)
             G.add_point(p2)
             G.add_edge(p1, p2)
-        G.plot_knotwork(0.75, 1.25, color_each_thread = True, interp=fun)
+        G.plot_knotwork(0.75, 1.6, color_each_thread = True, interp=fun)
         # G.plot()
         plt.show()
     
     def create_pulli_grid(self, shape, spacing = 100):
         match = {
             "square": self.create_square_grid,
-            "triangular": self.create_triangular_grid
+            "triangular": self.create_triangular_grid,
+            "hexagonal": self.create_hexagonal_grid
         }
         match[shape](spacing)
     
     def create_square_grid(self, spacing):
-        print("square")
         for i in range(2 * self.PULLI_RADIUS, self.WIDTH, spacing):
             for j in range(2 * self.PULLI_RADIUS, self.HEIGHT, spacing):
                 pulli = self.create_oval(i - self.PULLI_RADIUS, j - self.PULLI_RADIUS, i + self.PULLI_RADIUS, j + self.PULLI_RADIUS, fill="red")
                 self.pullis.append((i, j, pulli))
 
-    def create_triangular_grid(self, spacing):
-        print("triangular")
+    def create_triangular_grid(self, spacing, hex=False):
         dbr = 2 * self.PULLI_RADIUS
         
         i0 = dbr - int(self.HEIGHT / sqrt(3))
         imax = self.WIDTH - dbr
-        
-        for i in range(i0, imax, spacing):
-            if i < dbr:
-                j0 = ceil(2 * (dbr - i) / spacing) * spacing + dbr
-            else:
-                j0 = dbr
-            if i > imax + i0:
-                jmax = 2 * (imax - i) + dbr
-            else:
-                jmax = 2 * int(self.HEIGHT / sqrt(3)) + dbr
 
+        iind = 0
+        for i in range(i0, imax, spacing):
+            j0 = dbr
+            jmax = 2 * int(self.HEIGHT / sqrt(3)) + dbr
+            jind = 0
             for j in range(j0, jmax, spacing):
                 x = i + j / 2
                 y = j * sqrt(3) / 2
-                pulli = self.create_oval(x - self.PULLI_RADIUS, y - self.PULLI_RADIUS, x + self.PULLI_RADIUS, y + self.PULLI_RADIUS, fill="red")
-                self.pullis.append((x, y, pulli))
+                if not hex or (jind % 3 != iind % 3):
+                    pulli = self.create_oval(x - self.PULLI_RADIUS, y - self.PULLI_RADIUS, x + self.PULLI_RADIUS, y + self.PULLI_RADIUS, fill="red")
+                    self.pullis.append((x, y, pulli))
+                jind += 1
+
+            iind += 1
+
+
+    def create_hexagonal_grid(self, spacing):
+        self.create_triangular_grid(spacing, hex=True)
+                
 
     def save(self):
         G = Grid([])
@@ -251,8 +254,9 @@ class PulliBoard(tk.Canvas):
         fh.close()
 
     def load(self):
-        regexp = r"^((?:\([0-9e+\-.]*, [0-9e+\-.]*\) )+)-((?: (?:\([0-9e+\-.]*, [0-9e+\-.]*\)) (?:\([0-9e+\-.]*, [0-9e+\-.]*\)))+)$"
+        regexp = r"^((?:\([0-9e+\-.]+, [0-9e+\-.]+\) )*)-((?: (?:\([0-9e+\-.]+, [0-9e+\-.]+\)) (?:\([0-9e+\-.]+, [0-9e+\-.]+\)))*)$"
         fh = askopenfile(initialdir="Kolam-Project/saves")
+        self.clean()
         content = fh.readline()
         match = re.search(regexp, content)
         if match is None:

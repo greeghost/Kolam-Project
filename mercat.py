@@ -213,7 +213,6 @@ class Grid(object):
         """Convert a Grid object to a string representation."""
         points = " ".join([str(p) for p in self.points])
         edges = " ".join([f"{str(u)} {str(v)}" for u in self.edges for v in self.edges[u] if u < v])
-        print (f"{points} - {edges}")
         return f"{points} - {edges}"
 
 
@@ -233,8 +232,8 @@ def cubic_hermite(u, v, w, p, t, **kwargs):
     # t : [0-1], point on which to evaluate the function
     cos = kwargs.get("cos", 1)
     val1 = (2 * t ** 3 - 3 * t ** 2 + 1) * u
-    val2 = 4 * (t ** 3 - 2 * t ** 2 + t) * ((1 + cos) * (v - u))
-    val3 = 4 * (t ** 3 - t ** 2) * ((1 + cos) * (p - w))
+    val2 = 6 * (t ** 3 - 2 * t ** 2 + t) * ((1 + cos) * (v - u))
+    val3 = 6 * (t ** 3 - t ** 2) * ((1 + cos) * (p - w))
     val4 = (-2 * t ** 3 + 3 * t ** 2) * p
     res = val1 + val2 + val3 + val4
     return res.x, res.y

@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter.filedialog import asksaveasfile,  askopenfile
 from math import sqrt, ceil, floor
 from mercat import Grid, Point
+from random import random
 import matplotlib.pyplot as plt
 import re
 
@@ -34,7 +35,7 @@ class ControlPanel(tk.Canvas):
         self.b3.grid(row=2, column=0)
 
         self.b4 = tk.Button(self, text = "Apply Mercat Algorithm", command = self.mercatize)
-        self.l1 = tk.Label(self, text="method")
+        self.l1 = tk.Label(self, text="Method")
         self.e1 = tk.StringVar(self)
         self.e1.set("bezier")
         self.om1 = tk.OptionMenu(self, self.e1, *["bezier", "hermite"])
@@ -45,7 +46,7 @@ class ControlPanel(tk.Canvas):
         self.b5 = tk.Button(self, text = "Gridify", command = self.gridify)
         self.l2 = tk.Label(self, text="spacing")
         self.e2 = tk.Entry(self)
-        self.e2.insert(0, "150")
+        self.e2.insert(0, "80")
         self.e3 = tk.StringVar(self)
         self.e3.set("square")
         self.l3 = tk.Label(self, text="shape")
@@ -61,6 +62,20 @@ class ControlPanel(tk.Canvas):
 
         self.b7 = tk.Button(self, text = "Load", command = self.load)
         self.b7.grid(row=7, column=0)
+
+        self.b8 = tk.Button(self, text = "Generate", command = self.generate)
+        self.l4 = tk.Label(self, text="edge density (0-1)")
+        self.e4 = tk.Entry(self)
+        self.e4.insert(0, "0.5")
+        self.e5 = tk.StringVar(self)
+        self.e5.set("None")
+        self.l5 = tk.Label(self, text="Symmetry")
+        self.om3 = tk.OptionMenu(self, self.e5, *["None", "Vertical", "Horizontal", "Radial"])
+        self.b8.grid(row=8, column=0)
+        self.l4.grid(row=8, column=1)
+        self.e4.grid(row=8, column=2)
+        self.l5.grid(row=9, column=1)
+        self.om3.grid(row=9, column=2)
 
     def mouse_preset_1(self):
         self.master.pb.selected_pulli = None
@@ -81,23 +96,40 @@ class ControlPanel(tk.Canvas):
         else:
             self.master.pb.mercatize("bezier")
 
-    def gridify(self):
+    def get_spacing(self):
         spacing = self.e2.get()
-        shape = self.e3.get()
         if spacing != "":
             try:
                 spacing = int(spacing)
-                self.master.pb.create_pulli_grid(shape, spacing)
+                return spacing
             except ValueError:
                 print("Invalid spacing")
         else:
-            self.master.pb.create_pulli_grid(shape)
+            return 80        
+    
+    def gridify(self):
+        spacing = self.get_spacing()
+        shape = self.e3.get()
+        self.master.pb.create_pulli_grid(shape, spacing)
     
     def save(self):
         self.master.pb.save()
     
     def load(self):
         self.master.pb.load()
+    
+    def generate(self):
+        spacing = self.get_spacing()
+        density = self.e4.get()
+        symmetry = self.e5.get()
+        if density != "":
+            try:
+                density = float(density)
+                self.master.pb.generate(density, symmetry, spacing)
+            except ValueError:
+                print("Invalid density")
+        else:
+            self.master.pb.generate(0.5, symmetry, spacing)
 
 class PulliBoard(tk.Canvas):
     PULLI_RADIUS = 10
@@ -209,11 +241,18 @@ class PulliBoard(tk.Canvas):
         }
         match[shape](spacing)
     
-    def create_square_grid(self, spacing):
-        for i in range(2 * self.PULLI_RADIUS, self.WIDTH, spacing):
-            for j in range(2 * self.PULLI_RADIUS, self.HEIGHT, spacing):
+    def create_square_grid(self, spacing, square=False):
+        ret = []
+        dist = max(self.WIDTH, self.HEIGHT)
+        hd = int(((dist - self.WIDTH) // 2) * square)
+        vd = int(((dist - self.HEIGHT) // 2) * square)
+        for i in range(2 * self.PULLI_RADIUS + vd, self.WIDTH - vd, spacing):
+            ret.append([])
+            for j in range(2 * self.PULLI_RADIUS + hd, self.HEIGHT - hd, spacing):
                 pulli = self.create_oval(i - self.PULLI_RADIUS, j - self.PULLI_RADIUS, i + self.PULLI_RADIUS, j + self.PULLI_RADIUS, fill="red")
                 self.pullis.append((i, j, pulli))
+                ret[-1].append((i, j, pulli))
+        return ret
 
     def create_triangular_grid(self, spacing, hex=False):
         dbr = 2 * self.PULLI_RADIUS
@@ -236,11 +275,9 @@ class PulliBoard(tk.Canvas):
 
             iind += 1
 
-
     def create_hexagonal_grid(self, spacing):
         self.create_triangular_grid(spacing, hex=True)
                 
-
     def save(self):
         G = Grid([])
         for link in self.links:
@@ -279,6 +316,89 @@ class PulliBoard(tk.Canvas):
             p2 = self.get_pulli(float(p2[0]), -float(p2[1]))
             line = self.create_line(p1[0], p1[1], p2[0], p2[1], width=2)
             self.links.append((p1, p2, line))
+    
+    def generate(self, density, symmetry, spacing):
+        self.clean()
+        pullis = self.create_square_grid(spacing, square=True)
+
+        i_amount = len(pullis)
+        j_amount = len(pullis[0])
+
+        if symmetry == "None":
+            imax = i_amount
+            jmax = j_amount
+        elif symmetry == "Vertical":
+            imax = i_amount // 2 + i_amount % 2
+            jmax = j_amount
+        elif symmetry == "Horizontal":
+            imax = i_amount
+            jmax = j_amount // 2 + j_amount % 2
+        elif symmetry == "Radial":
+            imax = i_amount // 2 + i_amount % 2
+            jmax = j_amount // 2
+            
+        for i in range(imax):
+            for j in range(jmax):
+                if i != len(pullis) - 1 and random() < density:
+                    # Horizontal link
+                    p1 = pullis[i][j]
+                    p2 = pullis[i + 1][j]
+                    line = self.create_line(p1[0], p1[1], p2[0], p2[1], width=2)
+                    self.links.append((p1, p2, line))
+                    if symmetry == "Vertical":
+                        p1 = pullis[-i - 1][j]
+                        p2 = pullis[-i - 2][j]
+                        line = self.create_line(p1[0], p1[1], p2[0], p2[1], width=2)
+                        self.links.append((p1, p2, line))
+                    elif symmetry == "Horizontal":
+                        p1 = pullis[i][-j - 1]
+                        p2 = pullis[i + 1][-j - 1]
+                        line = self.create_line(p1[0], p1[1], p2[0], p2[1], width=2)
+                        self.links.append((p1, p2, line))
+                    elif symmetry == "Radial":
+                        p1 = pullis[j][-i - 1]
+                        p2 = pullis[j][-i - 2]
+                        line = self.create_line(p1[0], p1[1], p2[0], p2[1], width=2)
+                        self.links.append((p1, p2, line))
+                        p1 = pullis[-j - 1][i]
+                        p2 = pullis[-j - 1][i + 1]
+                        line = self.create_line(p1[0], p1[1], p2[0], p2[1], width=2)
+                        self.links.append((p1, p2, line))
+                        p1 = pullis[-i - 1][-j - 1]
+                        p2 = pullis[-i - 2][-j - 1]
+                        line = self.create_line(p1[0], p1[1], p2[0], p2[1], width=2)
+                        self.links.append((p1, p2, line))
+
+                                                
+                if j != len(pullis[i]) - 1 and random() < density:
+                    p1 = pullis[i][j]
+                    p2 = pullis[i][j + 1]
+                    line = self.create_line(p1[0], p1[1], p2[0], p2[1], width=2)
+                    self.links.append((p1, p2, line))
+                    if symmetry == "Vertical":
+                        p1 = pullis[-i - 1][j]
+                        p2 = pullis[-i - 1][j + 1]
+                        line = self.create_line(p1[0], p1[1], p2[0], p2[1], width=2)
+                        self.links.append((p1, p2, line))
+                    elif symmetry == "Horizontal":
+                        p1 = pullis[i][-j - 1]
+                        p2 = pullis[i][-j - 2]
+                        line = self.create_line(p1[0], p1[1], p2[0], p2[1], width=2)
+                        self.links.append((p1, p2, line))
+                    elif symmetry == "Radial":
+                        p1 = pullis[j][-i - 1]
+                        p2 = pullis[j + 1][-i - 1]
+                        line = self.create_line(p1[0], p1[1], p2[0], p2[1], width=2)
+                        self.links.append((p1, p2, line))
+                        p1 = pullis[-j - 1][i]
+                        p2 = pullis[-j - 2][i]
+                        line = self.create_line(p1[0], p1[1], p2[0], p2[1], width=2)
+                        self.links.append((p1, p2, line))
+                        p1 = pullis[-i - 1][-j - 1]
+                        p2 = pullis[-i - 1][-j - 2]
+                        line = self.create_line(p1[0], p1[1], p2[0], p2[1], width=2)
+                        self.links.append((p1, p2, line))
+
 
 if __name__ == '__main__':
     KolamApp().run()
